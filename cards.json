@@ -92,6 +92,88 @@
           "name": "OpenAi account 2"
         }
       }
+    },
+    {
+      "parameters": {
+        "functionCode": "const results = [];\n\nfor (const item of items) {\n  const data = item.json ?? {};\n  const textCandidates = [];\n\n  if (typeof data === 'string') {\n    textCandidates.push(data);\n  }\n\n  if (typeof data.text === 'string') {\n    textCandidates.push(data.text);\n  }\n\n  if (typeof data.result === 'string') {\n    textCandidates.push(data.result);\n  }\n\n  if (Array.isArray(data.data)) {\n    for (const entry of data.data) {\n      if (!entry) {\n        continue;\n      }\n\n      if (typeof entry === 'string') {\n        textCandidates.push(entry);\n      }\n\n      const content = entry.content ?? entry.message ?? entry.text;\n\n      if (typeof content === 'string') {\n        textCandidates.push(content);\n      } else if (Array.isArray(content)) {\n        for (const contentEntry of content) {\n          if (!contentEntry) {\n            continue;\n          }\n\n          if (typeof contentEntry === 'string') {\n            textCandidates.push(contentEntry);\n          } else if (typeof contentEntry.text === 'string') {\n            textCandidates.push(contentEntry.text);\n          }\n        }\n      }\n    }\n  } else if (typeof data.data === 'string') {\n    textCandidates.push(data.data);\n  }\n\n  if (Array.isArray(data.choices)) {\n    for (const choice of data.choices) {\n      if (!choice) {\n        continue;\n      }\n\n      if (typeof choice.text === 'string') {\n        textCandidates.push(choice.text);\n      }\n\n      const message = choice.message ?? {};\n      if (typeof message === 'string') {\n        textCandidates.push(message);\n      } else if (typeof message.content === 'string') {\n        textCandidates.push(message.content);\n      } else if (Array.isArray(message.content)) {\n        for (const entry of message.content) {\n          if (!entry) {\n            continue;\n          }\n\n          if (typeof entry === 'string') {\n            textCandidates.push(entry);\n          } else if (typeof entry.text === 'string') {\n            textCandidates.push(entry.text);\n          }\n        }\n      }\n    }\n  }\n\n  const uniqueCandidates = [...new Set(textCandidates.filter((candidate) => typeof candidate === 'string' && candidate.trim().length))];\n\n  let parsed;\n  let lastError;\n\n  for (const candidate of uniqueCandidates) {\n    try {\n      parsed = JSON.parse(candidate);\n      break;\n    } catch (error) {\n      lastError = error;\n    }\n  }\n\n  if (!parsed) {\n    throw new Error(`Não foi possível interpretar a resposta do modelo como JSON: ${lastError}`);\n  }\n\n  results.push({ json: parsed });\n}\n\nreturn results;"
+      },
+      "id": "7390872e-e6bd-4d59-93fa-88da0655222c",
+      "name": "Interpretar JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        576,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const output = [];\n\nfor (const item of items) {\n  const data = item.json ?? {};\n  const base = {\n    topic: data.topic ?? '',\n    aspect_name: data.aspect?.name ?? '',\n    aspect_description: data.aspect?.description ?? '',\n    background_color: data.visual_style?.background_color ?? '',\n    text_color: data.visual_style?.text_color ?? '',\n    section_dividers: data.visual_style?.section_dividers ?? ''\n  };\n\n  if (Array.isArray(data.points) && data.points.length) {\n    for (const point of data.points) {\n      output.push({\n        json: {\n          ...base,\n          point_id: point?.id ?? '',\n          point_question: point?.question ?? '',\n          point_description: point?.description ?? ''\n        }\n      });\n    }\n  } else {\n    output.push({ json: base });\n  }\n}\n\nreturn output;"
+      },
+      "id": "469118c7-051a-4332-b240-d0ac6295e1db",
+      "name": "Preparar linhas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        768,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "create",
+        "title": "={{ 'crads' + $now.toFormat('yyyyLLddHHmmss') }}"
+      },
+      "id": "fbd3a81d-b3f5-4f8d-a792-ffaeea9cadf8",
+      "name": "Criar planilha",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        768,
+        -128
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TfqOT5rYq8z8E7Wc",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "resource": "sheet",
+        "sheetId": "={{ $('Criar planilha').item.json.spreadsheetId }}",
+        "options": {
+          "valueInputMode": "RAW"
+        },
+        "columns": [
+          "topic",
+          "aspect_name",
+          "aspect_description",
+          "point_id",
+          "point_question",
+          "point_description",
+          "background_color",
+          "text_color",
+          "section_dividers"
+        ]
+      },
+      "id": "6f3aa757-7ae9-4427-afba-19aae4a830ad",
+      "name": "Registrar dados",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        960,
+        112
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TfqOT5rYq8z8E7Wc",
+          "name": "Google Sheets account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -112,6 +194,57 @@
         [
           {
             "node": "Analyze image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze image": {
+      "main": [
+        [
+          {
+            "node": "Interpretar JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar JSON": {
+      "main": [
+        [
+          {
+            "node": "Criar planilha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar linhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar linhas": {
+      "main": [
+        [
+          {
+            "node": "Registrar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar planilha": {
+      "main": [
+        [
+          {
+            "node": "Registrar dados",
             "type": "main",
             "index": 0
           }
