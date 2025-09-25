@@ -74,7 +74,7 @@
           "mode": "list",
           "cachedResultName": "GPT-4O"
         },
-        "text": "Traduza o texto dessa imagem para o portugues. Dê a resposta no formato Json respeitando o seguinte template:\n{\n  \"topic\": \"Observability Quality Aspects\",\n  \"aspect\": {\n    \"name\": \"Controllability Aspect\",\n    \"description\": \"How well can you see what’s actually going on within the product? Can you answer new questions without deploying code?\"\n  },\n  \"points\": [\n    {\n      \"id\": 1,\n      \"question\": \"How well can you understand the internals of a system by only observing the outputs?\"\n    },\n    {\n      \"id\": 2,\n      \"description\": \"Capture different sources of data within rich logs with improved information for debugging, vulnerability detection, traffic monitoring...\"\n    },\n    {\n      \"id\": 3,\n      \"description\": \"Swinging red lights! Alarms! Our system has picked up that we’re losing money/users/speed because of a failure in a specific running feature.\"\n    }\n  ],\n  \"visual_style\": {\n    \"background_color\": \"blue\",\n    \"text_color\": \"white\",\n    \"section_dividers\": \"dotted_lines\"\n  }\n}\n",
+        "text": "Traduza o texto dessa imagem para o português.\nRetorne a resposta exclusivamente em CSV (sem bloco de código) usando vírgula como separador e incluindo uma linha de cabeçalho.\nUse exatamente as seguintes colunas na primeira linha: topic,aspect_name,aspect_description,point_id,point_question,point_description,background_color,text_color,section_dividers.\nCrie uma linha para cada ponto identificado repetindo as informações gerais quando necessário.\nSe uma informação não estiver disponível, deixe a célula vazia.\nGaranta que os valores que contêm vírgulas sejam envolvidos por aspas duplas e que aspas internas sejam duplicadas.",
         "imageUrls": "={{ $json.webContentLink }}",
         "options": {}
       },
@@ -95,10 +95,10 @@
     },
     {
       "parameters": {
-        "functionCode": "const results = [];\n\nfor (const item of items) {\n  const data = item.json ?? {};\n  const textCandidates = [];\n\n  if (typeof data === 'string') {\n    textCandidates.push(data);\n  }\n\n  if (typeof data.text === 'string') {\n    textCandidates.push(data.text);\n  }\n\n  if (typeof data.result === 'string') {\n    textCandidates.push(data.result);\n  }\n\n  if (Array.isArray(data.data)) {\n    for (const entry of data.data) {\n      if (!entry) {\n        continue;\n      }\n\n      if (typeof entry === 'string') {\n        textCandidates.push(entry);\n      }\n\n      const content = entry.content ?? entry.message ?? entry.text;\n\n      if (typeof content === 'string') {\n        textCandidates.push(content);\n      } else if (Array.isArray(content)) {\n        for (const contentEntry of content) {\n          if (!contentEntry) {\n            continue;\n          }\n\n          if (typeof contentEntry === 'string') {\n            textCandidates.push(contentEntry);\n          } else if (typeof contentEntry.text === 'string') {\n            textCandidates.push(contentEntry.text);\n          }\n        }\n      }\n    }\n  } else if (typeof data.data === 'string') {\n    textCandidates.push(data.data);\n  }\n\n  if (Array.isArray(data.choices)) {\n    for (const choice of data.choices) {\n      if (!choice) {\n        continue;\n      }\n\n      if (typeof choice.text === 'string') {\n        textCandidates.push(choice.text);\n      }\n\n      const message = choice.message ?? {};\n      if (typeof message === 'string') {\n        textCandidates.push(message);\n      } else if (typeof message.content === 'string') {\n        textCandidates.push(message.content);\n      } else if (Array.isArray(message.content)) {\n        for (const entry of message.content) {\n          if (!entry) {\n            continue;\n          }\n\n          if (typeof entry === 'string') {\n            textCandidates.push(entry);\n          } else if (typeof entry.text === 'string') {\n            textCandidates.push(entry.text);\n          }\n        }\n      }\n    }\n  }\n\n  const uniqueCandidates = [...new Set(textCandidates.filter((candidate) => typeof candidate === 'string' && candidate.trim().length))];\n\n  let parsed;\n  let lastError;\n\n  for (const candidate of uniqueCandidates) {\n    try {\n      parsed = JSON.parse(candidate);\n      break;\n    } catch (error) {\n      lastError = error;\n    }\n  }\n\n  if (!parsed) {\n    throw new Error(`Não foi possível interpretar a resposta do modelo como JSON: ${lastError}`);\n  }\n\n  results.push({ json: parsed });\n}\n\nreturn results;"
+        "functionCode": "const EXPECTED_HEADERS = [\n  'topic',\n  'aspect_name',\n  'aspect_description',\n  'point_id',\n  'point_question',\n  'point_description',\n  'background_color',\n  'text_color',\n  'section_dividers',\n];\n\nfunction normalizeHeader(line) {\n  return line\n    .replace(/^\\uFEFF/, '')\n    .split(',')\n    .map((part) => part.trim().toLowerCase())\n    .join(',');\n}\n\nfunction extractCsvBlock(input) {\n  if (typeof input !== 'string') {\n    return null;\n  }\n\n  const lines = input.split(/\\r?\\n/);\n  const normalizedExpected = normalizeHeader(EXPECTED_HEADERS.join(','));\n  const headerIndex = lines.findIndex((line) => normalizeHeader(line) === normalizedExpected);\n\n  if (headerIndex === -1) {\n    return null;\n  }\n\n  return lines.slice(headerIndex).join('\\n');\n}\n\nfunction parseCsvLine(line) {\n  const values = [];\n  let current = '';\n  let inQuotes = false;\n\n  for (let index = 0; index < line.length; index += 1) {\n    const char = line[index];\n\n    if (inQuotes) {\n      if (char === '\"') {\n        if (line[index + 1] === '\"') {\n          current += '\"';\n          index += 1;\n        } else {\n          inQuotes = false;\n        }\n      } else {\n        current += char;\n      }\n    } else if (char === '\"') {\n      inQuotes = true;\n    } else if (char === ',') {\n      values.push(current);\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n\n  values.push(current);\n\n  return values.map((value) => value.trim());\n}\n\nfunction parseCsvCandidate(candidate) {\n  const csvBlock = extractCsvBlock(candidate);\n\n  if (!csvBlock) {\n    return null;\n  }\n\n  const lines = csvBlock.split(/\\r?\\n/);\n\n  while (lines.length && !lines[0].trim()) {\n    lines.shift();\n  }\n\n  if (!lines.length) {\n    return null;\n  }\n\n  const parsedLines = [];\n  const headerLine = lines.shift().replace(/\\r$/, '');\n  const headers = parseCsvLine(headerLine);\n  const normalizedHeaders = headers.map((header) => header.trim().toLowerCase());\n  const expectedNormalized = EXPECTED_HEADERS.map((header) => header.toLowerCase());\n\n  if (\n    normalizedHeaders.length !== expectedNormalized.length ||\n    normalizedHeaders.some((value, index) => value !== expectedNormalized[index])\n  ) {\n    return null;\n  }\n\n  const rows = [];\n  parsedLines.push(headerLine);\n\n  for (const rawLine of lines) {\n    const cleanedLine = rawLine.replace(/\\r$/, '');\n\n    if (!cleanedLine.trim()) {\n      continue;\n    }\n\n    const values = parseCsvLine(cleanedLine);\n\n    if (values.length !== headers.length) {\n      break;\n    }\n\n    const entry = {};\n\n    for (let index = 0; index < EXPECTED_HEADERS.length; index += 1) {\n      const key = EXPECTED_HEADERS[index];\n      const value = values[index] ?? '';\n      entry[key] = typeof value === 'string' ? value.trim() : '';\n    }\n\n    rows.push(entry);\n    parsedLines.push(cleanedLine);\n  }\n\n  if (!rows.length) {\n    return null;\n  }\n\n  return {\n    rows,\n    rawCsv: parsedLines.join('\\n'),\n  };\n}\n\nconst results = [];\n\nfor (const item of items) {\n  const data = item.json ?? {};\n  const candidates = [];\n\n  if (typeof data === 'string') {\n    candidates.push(data);\n  }\n\n  if (typeof data.text === 'string') {\n    candidates.push(data.text);\n  }\n\n  if (typeof data.result === 'string') {\n    candidates.push(data.result);\n  }\n\n  if (Array.isArray(data.data)) {\n    for (const entry of data.data) {\n      if (!entry) {\n        continue;\n      }\n\n      if (typeof entry === 'string') {\n        candidates.push(entry);\n        continue;\n      }\n\n      const content = entry.content ?? entry.message ?? entry.text;\n\n      if (typeof content === 'string') {\n        candidates.push(content);\n      } else if (Array.isArray(content)) {\n        for (const contentEntry of content) {\n          if (!contentEntry) {\n            continue;\n          }\n\n          if (typeof contentEntry === 'string') {\n            candidates.push(contentEntry);\n          } else if (typeof contentEntry.text === 'string') {\n            candidates.push(contentEntry.text);\n          }\n        }\n      }\n    }\n  } else if (typeof data.data === 'string') {\n    candidates.push(data.data);\n  }\n\n  if (Array.isArray(data.choices)) {\n    for (const choice of data.choices) {\n      if (!choice) {\n        continue;\n      }\n\n      if (typeof choice.text === 'string') {\n        candidates.push(choice.text);\n      }\n\n      const message = choice.message ?? {};\n\n      if (typeof message === 'string') {\n        candidates.push(message);\n      } else if (typeof message.content === 'string') {\n        candidates.push(message.content);\n      } else if (Array.isArray(message.content)) {\n        for (const entry of message.content) {\n          if (!entry) {\n            continue;\n          }\n\n          if (typeof entry === 'string') {\n            candidates.push(entry);\n          } else if (typeof entry.text === 'string') {\n            candidates.push(entry.text);\n          }\n        }\n      }\n    }\n  }\n\n  const uniqueCandidates = [...new Set(candidates.filter((candidate) => typeof candidate === 'string' && candidate.trim().length))];\n\n  let parsed;\n\n  for (const candidate of uniqueCandidates) {\n    const result = parseCsvCandidate(candidate);\n\n    if (result) {\n      parsed = result;\n      break;\n    }\n  }\n\n  if (!parsed) {\n    throw new Error('Não foi possível interpretar a resposta do modelo como CSV.');\n  }\n\n  results.push({ json: parsed });\n}\n\nreturn results;"
       },
       "id": "7390872e-e6bd-4d59-93fa-88da0655222c",
-      "name": "Interpretar JSON",
+      "name": "Interpretar CSV",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
@@ -108,7 +108,7 @@
     },
     {
       "parameters": {
-        "functionCode": "const output = [];\n\nfor (const item of items) {\n  const data = item.json ?? {};\n  const base = {\n    topic: data.topic ?? '',\n    aspect_name: data.aspect?.name ?? '',\n    aspect_description: data.aspect?.description ?? '',\n    background_color: data.visual_style?.background_color ?? '',\n    text_color: data.visual_style?.text_color ?? '',\n    section_dividers: data.visual_style?.section_dividers ?? ''\n  };\n\n  if (Array.isArray(data.points) && data.points.length) {\n    for (const point of data.points) {\n      output.push({\n        json: {\n          ...base,\n          point_id: point?.id ?? '',\n          point_question: point?.question ?? '',\n          point_description: point?.description ?? ''\n        }\n      });\n    }\n  } else {\n    output.push({ json: base });\n  }\n}\n\nreturn output;"
+        "functionCode": "const EXPECTED_HEADERS = [\n  'topic',\n  'aspect_name',\n  'aspect_description',\n  'point_id',\n  'point_question',\n  'point_description',\n  'background_color',\n  'text_color',\n  'section_dividers',\n];\n\nconst output = [];\n\nfor (const item of items) {\n  const rows = item.json?.rows;\n\n  if (!Array.isArray(rows) || !rows.length) {\n    continue;\n  }\n\n  for (const row of rows) {\n    const entry = {};\n\n    for (const header of EXPECTED_HEADERS) {\n      const value = row?.[header];\n      entry[header] = typeof value === 'string' || typeof value === 'number' ? String(value) : '';\n    }\n\n    output.push({ json: entry });\n  }\n}\n\nif (!output.length) {\n  throw new Error('Nenhuma linha CSV foi encontrada para registrar.');\n}\n\nreturn output;"
       },
       "id": "469118c7-051a-4332-b240-d0ac6295e1db",
       "name": "Preparar linhas",
@@ -204,25 +204,7 @@
       "main": [
         [
           {
-            "node": "Interpretar JSON",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Interpretar JSON": {
-      "main": [
-        [
-          {
-            "node": "Criar planilha",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Preparar linhas",
+            "node": "Interpretar CSV",
             "type": "main",
             "index": 0
           }
@@ -245,6 +227,24 @@
         [
           {
             "node": "Registrar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar CSV": {
+      "main": [
+        [
+          {
+            "node": "Criar planilha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar linhas",
             "type": "main",
             "index": 0
           }
