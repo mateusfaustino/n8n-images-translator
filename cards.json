@@ -1,0 +1,133 @@
+{
+  "name": "cards",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -16
+      ],
+      "id": "cea6805a-0b6d-43a1-804d-7c5ace5bbdcc",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "content": "## Obtenção de cartas",
+        "height": 258.0964713064308,
+        "width": 903.9029040203084
+      },
+      "id": "1310d884-a5af-4616-a12a-4493f3293a19",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "1QNw3NdCrl9LLuh6pV2FSLVgMu-6SAVde",
+            "mode": "list",
+            "cachedResultName": "cartas em ingles",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1QNw3NdCrl9LLuh6pV2FSLVgMu-6SAVde"
+          }
+        },
+        "options": {
+          "fields": [
+            "webViewLink",
+            "id",
+            "name",
+            "*"
+          ]
+        }
+      },
+      "id": "6810fda3-a89b-425e-b88a-d11f7816b64c",
+      "name": "Encontra Cartas",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        192,
+        -16
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "EZQEcbZc2fRD9p8C",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "text": "Traduza o texto dessa imagem para o portugues. Dê a resposta no formato Json respeitando o seguinte template:\n{\n  \"topic\": \"Observability Quality Aspects\",\n  \"aspect\": {\n    \"name\": \"Controllability Aspect\",\n    \"description\": \"How well can you see what’s actually going on within the product? Can you answer new questions without deploying code?\"\n  },\n  \"points\": [\n    {\n      \"id\": 1,\n      \"question\": \"How well can you understand the internals of a system by only observing the outputs?\"\n    },\n    {\n      \"id\": 2,\n      \"description\": \"Capture different sources of data within rich logs with improved information for debugging, vulnerability detection, traffic monitoring...\"\n    },\n    {\n      \"id\": 3,\n      \"description\": \"Swinging red lights! Alarms! Our system has picked up that we’re losing money/users/speed because of a failure in a specific running feature.\"\n    }\n  ],\n  \"visual_style\": {\n    \"background_color\": \"blue\",\n    \"text_color\": \"white\",\n    \"section_dividers\": \"dotted_lines\"\n  }\n}\n",
+        "imageUrls": "={{ $json.webContentLink }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        384,
+        -16
+      ],
+      "id": "75ad4b2e-606c-4ba5-abb4-c4d3adaf3513",
+      "name": "Analyze image",
+      "credentials": {
+        "openAiApi": {
+          "id": "e24cqqnMWNr46eL0",
+          "name": "OpenAi account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Encontra Cartas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encontra Cartas": {
+      "main": [
+        [
+          {
+            "node": "Analyze image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3ec2323b-6053-4f9d-8be5-300525b6bdec",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9f80713bf772ccc2c93dc92bf6168d73ec5f1400b4f905df9368f7195b1135bb"
+  },
+  "id": "85Knexd4LJtR7QUz",
+  "tags": []
+}
